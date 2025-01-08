@@ -159,6 +159,9 @@ mkfs: mkfs.c fs.h
 UPROGS=\
 	_cat\
 	_date\
+    _virt2real_test\
+    _num_pages_test\
+	_corretor\
 	_echo\
 	_forktest\
 	_grep\

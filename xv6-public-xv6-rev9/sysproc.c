@@ -106,3 +106,41 @@ sys_date(void)
 
   return 0;
 }
+
+pte_t* walkpgdir(pde_t *pgdir, const void *va, int alloc);
+
+int
+sys_virt2real(void)
+{
+  char *va;
+  pte_t *pte;
+
+  if (argptr(0, (void*)&va, sizeof(char*)) < 0) {
+    return -1;
+  }
+
+  pte = walkpgdir(proc->pgdir, va, 0);
+  if (!pte || !(*pte & PTE_P)) {
+    return -2;
+  }
+
+  return PTE_ADDR(*pte) | ((uint)va & 0xFFF);
+}
+
+int
+sys_num_pages(void)
+{
+  uint va;
+  int page_count = 0;
+  pte_t *pte;
+
+  for (va = 0; va < proc->sz; va += PGSIZE) {
+    pte = walkpgdir(proc->pgdir, (void*)va, 0);
+    if (pte && (*pte & PTE_P)) {
+      page_count++;
+    }
+  }
+
+  return page_count;
+}
+
