@@ -96,13 +96,12 @@ sys_date(void)
   char *ptr;
   argptr(0, &ptr, sizeof(struct rtcdate*));
 
-  struct rtcdate *d = (struct rtcdate *)ptr;
-
-  if (d == 0) {
+  struct rtcdate *timestamp = (struct rtcdate *)ptr;
+  if (timestamp == 0) {
     return -1;
   }
   
-  cmostime(d);
+  cmostime(timestamp);
 
   return 0;
 }
@@ -121,26 +120,30 @@ sys_virt2real(void)
 
   pte = walkpgdir(proc->pgdir, va, 0);
   if (!pte || !(*pte & PTE_P)) {
-    return -2;
+    return -1;
   }
 
-  return PTE_ADDR(*pte) | ((uint)va & 0xFFF);
+  int pa_num = PTE_ADDR(*pte) | ((uint)va & 0xFFF);
+
+  return pa_num;
 }
 
 int
 sys_num_pages(void)
 {
   uint va;
-  int page_count = 0;
+  int num_pages = 0;
   pte_t *pte;
 
   for (va = 0; va < proc->sz; va += PGSIZE) {
+    
     pte = walkpgdir(proc->pgdir, (void*)va, 0);
     if (pte && (*pte & PTE_P)) {
-      page_count++;
+      num_pages++;
     }
+    
   }
 
-  return page_count;
+  return num_pages;
 }
 
