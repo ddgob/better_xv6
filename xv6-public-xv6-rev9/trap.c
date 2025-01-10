@@ -78,6 +78,22 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
 
+  case T_PGFLT: {
+    uint va = rcr2();
+     
+    if ((tf->err & 0x2) == 0) {
+        cprintf("Page fault not a write at 0x%x by pid %d\n", va, proc->pid);
+        proc->killed = 1;
+        break;
+    }
+
+    if (handle_cow_fault(va) < 0) {
+        cprintf("Failed to handle CoW for pid %d at address 0x%x\n", proc->pid, va);
+        proc->killed = 1;
+    }
+    break;
+  }
+
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){

@@ -67,6 +67,9 @@ char*           kalloc(void);
 void            kfree(char*);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
+void 			decrement_page_ref(uint pa);
+void 			increment_page_ref(uint pa);
+uint 			get_page_ref(uint pa);
 
 // kbd.c
 void            kbdintr(void);
@@ -104,6 +107,7 @@ int             pipewrite(struct pipe*, char*, int);
 // proc.c
 void            exit(void);
 int             fork(void);
+int             forkcow(void);
 int             growproc(int);
 int             kill(int);
 void            pinit(void);
@@ -115,6 +119,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+pde_t*          copyuvmcow(pde_t *pgdir, uint sz);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -174,6 +179,7 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+int             handle_cow_fault(uint err_code);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

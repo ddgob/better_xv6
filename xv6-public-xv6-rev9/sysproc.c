@@ -106,3 +106,9 @@ sys_date(void)
 
   return 0;
 }
+
+int
+sys_forkcow(void)
+{
+  return forkcow();
+}
