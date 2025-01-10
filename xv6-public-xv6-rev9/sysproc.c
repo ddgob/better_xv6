@@ -96,13 +96,12 @@ sys_date(void)
   char *ptr;
   argptr(0, &ptr, sizeof(struct rtcdate*));
 
-  struct rtcdate *d = (struct rtcdate *)ptr;
-
-  if (d == 0) {
+  struct rtcdate *timestamp = (struct rtcdate *)ptr;
+  if (timestamp == 0) {
     return -1;
   }
   
-  cmostime(d);
+  cmostime(timestamp);
 
   return 0;
 }
@@ -112,3 +111,45 @@ sys_forkcow(void)
 {
   return forkcow();
 }
+
+pte_t* walkpgdir(pde_t *pgdir, const void *va, int alloc);
+
+int
+sys_virt2real(void)
+{
+  char *va;
+  pte_t *pte;
+
+  if (argptr(0, (void*)&va, sizeof(char*)) < 0) {
+    return -1;
+  }
+
+  pte = walkpgdir(proc->pgdir, va, 0);
+  if (!pte || !(*pte & PTE_P)) {
+    return -1;
+  }
+
+  int pa_num = PTE_ADDR(*pte) | ((uint)va & 0xFFF);
+
+  return pa_num;
+}
+
+int
+sys_num_pages(void)
+{
+  uint va;
+  int num_pages = 0;
+  pte_t *pte;
+
+  for (va = 0; va < proc->sz; va += PGSIZE) {
+    
+    pte = walkpgdir(proc->pgdir, (void*)va, 0);
+    if (pte && (*pte & PTE_P)) {
+      num_pages++;
+    }
+    
+  }
+
+  return num_pages;
+}
+
