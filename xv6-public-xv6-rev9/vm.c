@@ -431,37 +431,36 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 //PAGEBREAK!
 // Blank page.
 
-int handle_cow_fault(uint va) {
+int
+handle_cow_fault(uint va)
+{
     pte_t *pte;
     uint pa;
     char *mem;
 
     pte = walkpgdir(proc->pgdir, (void *)va, 0);
-
-    if (pte == 0 || !(*pte & PTE_P) || !(*pte & PTE_COW) || va >= KERNBASE) {
-        proc->killed = 1;
-        cprintf("Error: Invalid CoW page fault for pid %d at address 0x%x\n", proc->pid, va);
-        return -1;
+    if (!pte || !(*pte & PTE_P) || !(*pte & PTE_COW)) {
+        return -1; 
     }
 
-    pa = PTE_ADDR(*pte); 
+    pa = PTE_ADDR(*pte);  
 
     uint ref_count = get_page_ref(pa);
     if (ref_count < 1) {
         panic("handle_cow_fault: invalid ref_count");
     }
 
-    if (ref_count == 1) {
+    if (ref_count == 1) {    
         *pte = (*pte & ~PTE_COW) | PTE_W;
-    } else {
+    } else {     
         if ((mem = kalloc()) == 0) {
-            proc->killed = 1;
-            cprintf("Error: Out of memory, killing process pid %d\n", proc->pid);
-            return -1;
+            return -1;  
         }
 
         memmove(mem, (char *)P2V(pa), PGSIZE);
+
         *pte = V2P(mem) | PTE_P | PTE_W | PTE_U;
+
         decrement_page_ref(pa);
     }
 
