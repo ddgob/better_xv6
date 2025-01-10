@@ -19,6 +19,8 @@ struct run {
 struct {
   struct spinlock lock;
   int use_lock;
+  uint num_free_pages;
+  uint page_ref_count[PHYSTOP >> PGSHIFT];
   struct run *freelist;
 } kmem;
 
@@ -32,6 +34,7 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
+  kmem.num_free_pages = 0;
   freerange(vstart, vend);
 }
 
@@ -48,7 +51,10 @@ freerange(void *vstart, void *vend)
   char *p;
   p = (char*)PGROUNDUP((uint)vstart);
   for(; p + PGSIZE <= (char*)vend; p += PGSIZE)
+  { 
+    kmem.page_ref_count[V2P(p) >> PGSHIFT] = 0;          
     kfree(p);
+  }
 }
 
 //PAGEBREAK: 21
@@ -70,8 +76,18 @@ kfree(char *v)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = (struct run*)v;
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+
+  uint pa = V2P(v);
+  if (kmem.page_ref_count[pa >> PGSHIFT] > 0)
+    kmem.page_ref_count[pa >> PGSHIFT]--;
+
+  if (kmem.page_ref_count[pa >> PGSHIFT] == 0) {
+    memset(v, 1, PGSIZE);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    kmem.num_free_pages++;
+  }
+
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -86,11 +102,53 @@ kalloc(void)
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
+
   r = kmem.freelist;
-  if(r)
+
+  if (r) {
     kmem.freelist = r->next;
+    kmem.num_free_pages--;
+    kmem.page_ref_count[V2P((char*)r) >> PGSHIFT] = 1; 
+  }
+
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
 }
 
+void
+increment_page_ref(uint pa)
+{
+  if(pa >= PHYSTOP || pa < (uint)V2P(end))
+    panic("increment_page_ref");
+
+  acquire(&kmem.lock);
+  kmem.page_ref_count[pa >> PGSHIFT]++;
+  release(&kmem.lock);
+}
+
+void
+decrement_page_ref(uint pa)
+{
+  if(pa >= PHYSTOP || pa < (uint)V2P(end))
+    panic("decrement_page_ref");
+
+  acquire(&kmem.lock);
+  if (kmem.page_ref_count[pa >> PGSHIFT] > 0)
+    kmem.page_ref_count[pa >> PGSHIFT]--;
+  release(&kmem.lock);
+}
+
+uint
+get_page_ref(uint pa)
+{
+  if(pa >= PHYSTOP || pa < (uint)V2P(end))
+    panic("get_page_ref");
+
+  uint count;
+  acquire(&kmem.lock);
+  count = kmem.page_ref_count[pa >> PGSHIFT];
+  release(&kmem.lock);
+
+  return count;
+}

@@ -343,6 +343,46 @@ bad:
   return 0;
 }
 
+pde_t*
+copyuvmcow(pde_t *pgdir, uint sz)
+{
+    pte_t *pte;
+    uint pa, flags;
+    pde_t *d = setupkvm(); 
+
+    if (d == 0)
+        return 0;
+
+    for (uint i = 0; i < sz; i += PGSIZE) {
+        if ((pte = walkpgdir(pgdir, (void *)i, 0)) == 0)
+            panic("copyuvmcow: pte should exist");
+
+        if (!(*pte & PTE_P))
+            panic("copyuvmcow: page not present");
+
+        pa = PTE_ADDR(*pte);
+        flags = PTE_FLAGS(*pte);
+
+        *pte = *pte & ~PTE_W;
+        *pte = *pte | PTE_COW; 
+
+        int child_flags = (flags & ~PTE_W) | PTE_COW;
+
+        if (mappages(d, (void *)i, PGSIZE, pa, child_flags) < 0) {
+            cprintf("copyuvmcow: mappages failed for va 0x%x, pa 0x%x\n", i, pa);
+            freevm(d);
+            lcr3(V2P(pgdir));
+            return 0;
+        }
+
+        increment_page_ref(pa);
+    }
+
+    lcr3(V2P(pgdir));
+
+    return d;
+}
+
 //PAGEBREAK!
 // Map user virtual address to kernel address.
 char*
@@ -391,3 +431,40 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 //PAGEBREAK!
 // Blank page.
 
+int handle_cow_fault(uint va) {
+    pte_t *pte;
+    uint pa;
+    char *mem;
+
+    pte = walkpgdir(proc->pgdir, (void *)va, 0);
+
+    if (pte == 0 || !(*pte & PTE_P) || !(*pte & PTE_COW) || va >= KERNBASE) {
+        proc->killed = 1;
+        cprintf("Error: Invalid CoW page fault for pid %d at address 0x%x\n", proc->pid, va);
+        return -1;
+    }
+
+    pa = PTE_ADDR(*pte); 
+
+    uint ref_count = get_page_ref(pa);
+    if (ref_count < 1) {
+        panic("handle_cow_fault: invalid ref_count");
+    }
+
+    if (ref_count == 1) {
+        *pte = (*pte & ~PTE_COW) | PTE_W;
+    } else {
+        if ((mem = kalloc()) == 0) {
+            proc->killed = 1;
+            cprintf("Error: Out of memory, killing process pid %d\n", proc->pid);
+            return -1;
+        }
+
+        memmove(mem, (char *)P2V(pa), PGSIZE);
+        *pte = V2P(mem) | PTE_P | PTE_W | PTE_U;
+        decrement_page_ref(pa);
+    }
+
+    lcr3(V2P(proc->pgdir));
+    return 0;
+}

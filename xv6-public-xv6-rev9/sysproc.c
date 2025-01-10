@@ -106,6 +106,12 @@ sys_date(void)
   return 0;
 }
 
+int
+sys_forkcow(void)
+{
+  return forkcow();
+}
+
 pte_t* walkpgdir(pde_t *pgdir, const void *va, int alloc);
 
 int
